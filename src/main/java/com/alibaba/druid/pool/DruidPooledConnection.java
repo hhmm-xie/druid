@@ -69,13 +69,14 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
     private volatile     boolean               abandoned            = false;
     protected            StackTraceElement[]   connectStackTrace;
     protected            Throwable             disableError         = null;
-    public               ReentrantLock         lock                 = new ReentrantLock();
+    final                ReentrantLock         lock;
 
     public DruidPooledConnection(DruidConnectionHolder holder){
         super(holder.getConnection());
 
         this.conn = holder.getConnection();
         this.holder = holder;
+        this.lock = holder.lock;
         dupCloseLogEnable = holder.getDataSource().isDupCloseLogEnable();
         ownerThread = Thread.currentThread();
         connectedTimeMillis = System.currentTimeMillis();
@@ -146,6 +147,7 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
     public void closePoolableStatement(DruidPooledPreparedStatement stmt) throws SQLException {
         PreparedStatement rawStatement = stmt.getRawPreparedStatement();
 
+        final DruidConnectionHolder holder = this.holder;
         if (holder == null) {
             return;
         }
@@ -710,12 +712,17 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
         try {
             conn.setAutoCommit(autoCommit);
             holder.setUnderlyingAutoCommit(autoCommit);
+            holder.setLastExecTimeMillis(System.currentTimeMillis());
         } catch (SQLException ex) {
             handleException(ex, null);
         }
     }
 
     protected void transactionRecord(String sql) throws SQLException {
+        if (holder != null) {
+            holder.setLastExecTimeMillis(System.currentTimeMillis());
+        }
+
         if (transactionInfo == null && (!conn.getAutoCommit())) {
             DruidAbstractDataSource dataSource = holder.getDataSource();
             dataSource.incrementStartTransactionCount();
@@ -1187,19 +1194,19 @@ public class DruidPooledConnection extends PoolableWrapper implements javax.sql.
     }
 
     public String getSchema() throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        return conn.getSchema();
     }
 
     public void abort(Executor executor) throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        conn.abort(executor);
     }
 
     public void setNetworkTimeout(Executor executor, int milliseconds) throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        conn.setNetworkTimeout(executor, milliseconds);
     }
 
     public int getNetworkTimeout() throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        return conn.getNetworkTimeout();
     }
 
     final void beforeExecute() {

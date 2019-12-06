@@ -85,7 +85,12 @@ public final class JdbcUtils implements JdbcConstants {
         if (x == null) {
             return;
         }
+
         try {
+            if (x.isClosed()) {
+                return;
+            }
+
             x.close();
         } catch (Exception e) {
             LOG.debug("close connection error", e);
@@ -489,7 +494,7 @@ public final class JdbcUtils implements JdbcConstants {
         } else if(rawUrl.startsWith("jdbc:presto:")) {
             return JdbcConstants.PRESTO_DRIVER;
         }else {
-            throw new SQLException("unkow jdbc driver : " + rawUrl);
+            throw new SQLException("unknown jdbc driver : " + rawUrl);
         }
     }
 
